@@ -10,7 +10,7 @@ const LENGTHS = { T: 40, F: 45, U: 50 };
 const deg = (d) => (d * Math.PI) / 180;
 
 /** 발목을 고정한 2관절 옆모습을 만든다. 각도는 수직선 기준(도). */
-function pose({ shin, thigh, torso, visibility = 0.9, nearZ = -0.1 }) {
+function pose({ shin, thigh, torso, visibility = 0.9, rightVisibility = 0.9 }) {
   const ankle = { x: 640, y: 660 };
   const knee = {
     x: ankle.x + Math.sin(deg(shin)) * LENGTHS.T * CM,
@@ -27,14 +27,14 @@ function pose({ shin, thigh, torso, visibility = 0.9, nearZ = -0.1 }) {
   const points = { shoulder, hip, knee, ankle };
 
   const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0 }));
-  const put = (index, p, z, v) => {
-    landmarks[index] = { x: p.x / WIDTH, y: p.y / HEIGHT, z, visibility: v };
+  const put = (index, p, v) => {
+    landmarks[index] = { x: p.x / WIDTH, y: p.y / HEIGHT, z: 0, visibility: v };
   };
   const left = { shoulder: 11, hip: 23, knee: 25, ankle: 27 };
   const right = { shoulder: 12, hip: 24, knee: 26, ankle: 28 };
   for (const joint of Object.keys(points)) {
-    put(left[joint], points[joint], nearZ, visibility);
-    put(right[joint], points[joint], -nearZ, visibility);
+    put(left[joint], points[joint], visibility);
+    put(right[joint], points[joint], rightVisibility);
   }
   return toFrame(landmarks, WIDTH, HEIGHT);
 }
@@ -58,7 +58,7 @@ function repetition() {
 const DEEPEST_ANGLE = 180 - 80 - 40;
 
 test("서 있을 때 F-U 각도는 180도이다", () => {
-  assert.ok(Math.abs(hipAngle(pose(STANDING).left) - 180) < 0.01);
+  assert.ok(Math.abs(hipAngle(pose(STANDING)) - 180) < 0.01);
 });
 
 test("길이와 가장 깊은 지점의 각도를 계산한다", () => {
@@ -87,10 +87,11 @@ test("한 프레임짜리 관절 튐에 깊은 지점이 흔들리지 않는다"
   assert.ok(Math.abs(result.angle - DEEPEST_ANGLE) < 3, `angle=${result.angle}`);
 });
 
-test("카메라에 가까운 쪽 관절을 사용한다", () => {
-  assert.equal(analyze(repetition()).side, "left");
-  const frames = repetition().map(() => pose({ ...STANDING, nearZ: 0.1 }));
-  assert.equal(analyze(frames).side, "right");
+test("왼쪽 관절로만 측정한다", () => {
+  const rightHidden = Array.from({ length: 30 }, () => pose({ ...STANDING, rightVisibility: 0 }));
+  assert.equal(analyze(rightHidden).ok, true);
+  const leftHidden = Array.from({ length: 30 }, () => pose({ ...STANDING, visibility: 0 }));
+  assert.equal(analyze(leftHidden).ok, false);
 });
 
 test("스쿼트 동작이 없으면 경고한다", () => {

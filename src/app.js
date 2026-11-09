@@ -2,7 +2,7 @@ import {
   FilesetResolver,
   PoseLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { analyze, hasBody, hipAngle, isSideOn, nearSide, toFrame } from "./measure.js";
+import { analyze, hasBody, hipAngle, isSideOn, toFrame } from "./measure.js";
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
@@ -94,11 +94,10 @@ function showLiveState(frame) {
     setStatus(recording ? "측정 중 · 사람이 보이지 않습니다" : "사람이 보이지 않습니다", "warn");
     return;
   }
-  const side = nearSide([frame]);
-  if (!hasBody(frame[side])) {
+  if (!hasBody(frame)) {
     setStatus(recording ? "측정 중 · 전신이 화면에 나오게 해 주세요" : "전신이 화면에 나오게 해 주세요", "warn");
-  } else if (!isSideOn(frame, side)) {
-    setStatus(recording ? "측정 중 · 몸을 옆으로 돌려 주세요" : "몸을 카메라 옆으로 돌려 주세요", "warn");
+  } else if (!isSideOn(frame)) {
+    setStatus(recording ? "측정 중 · 몸의 왼쪽이 카메라를 향하게 해 주세요" : "몸의 왼쪽이 카메라를 향하게 서 주세요", "warn");
   } else if (recording) {
     setStatus("측정 중 · 스쿼트를 진행한 뒤 완료를 누르세요", "live");
   } else {
@@ -116,7 +115,7 @@ function processVideoFrame() {
   const landmarks = result.landmarks[0];
   const frame = landmarks ? toFrame(landmarks, video.videoWidth, video.videoHeight) : null;
   if (frame) {
-    drawSkeleton(frame[nearSide([frame])]);
+    drawSkeleton(frame);
     if (recording) frames.push(frame);
   }
   showLiveState(frame);

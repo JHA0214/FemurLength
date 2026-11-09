@@ -1,10 +1,9 @@
 // 포즈 랜드마크에서 T/F/U 길이와 F-U 각도를 계산하는 순수 함수 모음.
 // 브라우저 API에 의존하지 않으므로 Node에서 바로 테스트할 수 있다.
 
-const LANDMARKS = {
-  left: { shoulder: 11, hip: 23, knee: 25, ankle: 27 },
-  right: { shoulder: 12, hip: 24, knee: 26, ankle: 28 },
-};
+// 사용자는 몸의 왼쪽이 카메라를 향하게 서고, 왼쪽 관절로만 측정한다.
+const LANDMARKS = { shoulder: 11, hip: 23, knee: 25, ankle: 27 };
+const RIGHT_SHOULDER = 12; // 옆으로 섰는지 판단할 때만 쓴다.
 
 const MIN_VISIBILITY = 0.5;
 const MIN_FRAMES = 10;
@@ -18,21 +17,17 @@ const MIN_SQUAT_TRAVEL = 0.1;
 // 어깨 좌우 간격 / 몸통 길이가 이 값보다 크면 옆모습이 아니라고 판단한다.
 const MAX_SIDE_RATIO = 0.4;
 
-/** MediaPipe 정규화 랜드마크를 픽셀 좌표의 좌/우 관절로 변환한다. */
+/** MediaPipe 정규화 랜드마크를 픽셀 좌표의 왼쪽 관절로 변환한다. */
 export function toFrame(landmarks, width, height) {
-  const frame = {};
-  for (const [side, indices] of Object.entries(LANDMARKS)) {
-    frame[side] = {};
-    for (const [joint, index] of Object.entries(indices)) {
-      const p = landmarks[index];
-      const inView = p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
-      frame[side][joint] = {
-        x: p.x * width,
-        y: p.y * height,
-        z: p.z,
-        visibility: inView ? (p.visibility ?? 0) : 0,
-      };
-    }
+  const frame = { rightShoulderX: landmarks[RIGHT_SHOULDER].x * width };
+  for (const [joint, index] of Object.entries(LANDMARKS)) {
+    const p = landmarks[index];
+    const inView = p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+    frame[joint] = {
+      x: p.x * width,
+      y: p.y * height,
+      visibility: inView ? (p.visibility ?? 0) : 0,
+    };
   }
   return frame;
 }
@@ -74,23 +69,10 @@ export function hasBody(joints) {
   );
 }
 
-/** 카메라에 더 가까운 쪽(z가 작은 쪽)을 고른다. */
-export function nearSide(frames) {
-  const meanZ = (side) => {
-    let sum = 0;
-    for (const frame of frames) {
-      const { shoulder, hip, knee, ankle } = frame[side];
-      sum += shoulder.z + hip.z + knee.z + ankle.z;
-    }
-    return sum;
-  };
-  return meanZ("left") <= meanZ("right") ? "left" : "right";
-}
-
 /** 몸이 카메라에 대해 옆으로 서 있는지 어깨 좌우 간격으로 판단한다. */
-export function isSideOn(frame, side = nearSide([frame])) {
-  const shoulderGap = Math.abs(frame.left.shoulder.x - frame.right.shoulder.x);
-  const torso = distance(frame[side].hip, frame[side].shoulder);
+export function isSideOn(frame) {
+  const shoulderGap = Math.abs(frame.shoulder.x - frame.rightShoulderX);
+  const torso = distance(frame.hip, frame.shoulder);
   return torso > 0 && shoulderGap / torso <= MAX_SIDE_RATIO;
 }
 
@@ -99,23 +81,21 @@ export function isSideOn(frame, side = nearSide([frame])) {
  * - 길이: 선 자세 구간의 중앙값을 F = 1 기준 비율로 나타낸다.
  *   스쿼트 중에는 무릎이 벌어지면 2D 길이가 짧아지기 때문에 선 자세만 쓴다.
  * - 각도: 엉덩이가 가장 낮은 프레임 주변의 중앙값.
- * @returns {{ok:true, T:number, F:number, U:number, angle:number, side:string, frameCount:number, warnings:string[]} | {ok:false, error:string}}
+ * @returns {{ok:true, T:number, F:number, U:number, angle:number, frameCount:number, warnings:string[]} | {ok:false, error:string}}
  */
 export function analyze(frames) {
   if (frames.length === 0) {
     return { ok: false, error: "사람이 인식되지 않았습니다. 전신이 화면에 나오게 서 주세요." };
   }
 
-  const side = nearSide(frames);
-  const usable = frames.filter((frame) => hasBody(frame[side]));
-  if (usable.length < MIN_FRAMES) {
+  const joints = frames.filter(hasBody);
+  if (joints.length < MIN_FRAMES) {
     return {
       ok: false,
-      error: "어깨부터 발목까지 인식된 구간이 너무 짧습니다. 전신이 화면에 나오게 하고 다시 측정해 주세요.",
+      error: "어깨부터 발목까지 인식된 구간이 너무 짧습니다. 몸의 왼쪽이 카메라를 향하게 하고 전신이 화면에 나오게 해서 다시 측정해 주세요.",
     };
   }
 
-  const joints = usable.map((frame) => frame[side]);
   const rawHipY = joints.map((j) => j.hip.y);
   const hipY = rawHipY.map((_, i) => median(around(rawHipY, i, SMOOTH_RADIUS)));
 
@@ -135,9 +115,9 @@ export function analyze(frames) {
   if (travel < (pxT + pxF) * MIN_SQUAT_TRAVEL) {
     warnings.push("앉았다 일어나는 동작이 거의 감지되지 않았습니다. 각도 값이 부정확할 수 있습니다.");
   }
-  const sideOnCount = usable.filter((frame) => isSideOn(frame, side)).length;
-  if (sideOnCount < usable.length / 2) {
-    warnings.push("몸이 카메라 정면 쪽을 향해 있습니다. 정확히 옆으로 서서 다시 측정해 주세요.");
+  const sideOnCount = joints.filter(isSideOn).length;
+  if (sideOnCount < joints.length / 2) {
+    warnings.push("몸이 카메라 정면 쪽을 향해 있습니다. 몸의 왼쪽이 카메라를 향하게 옆으로 서서 다시 측정해 주세요.");
   }
 
   return {
@@ -146,8 +126,7 @@ export function analyze(frames) {
     F: 1,
     U: pxU / pxF,
     angle: median(around(joints.map(hipAngle), deepest, ANGLE_RADIUS)),
-    side,
-    frameCount: usable.length,
+    frameCount: joints.length,
     warnings,
   };
 }
