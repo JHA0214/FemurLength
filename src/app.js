@@ -21,6 +21,7 @@ const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const startButton = document.getElementById("start");
 const finishButton = document.getElementById("finish");
+const switchButton = document.getElementById("switch-camera");
 const resultEl = document.getElementById("result");
 const resultEmpty = document.getElementById("result-empty");
 const messagesEl = document.getElementById("messages");
@@ -33,6 +34,11 @@ const CAMERA_ERRORS = {
   NotReadableError: "다른 앱이 카메라를 사용 중입니다. 해당 앱을 종료하고 새로고침해 주세요.",
 };
 
+const CAMERA_LABELS = { user: "전면", environment: "후면" };
+
+let facing = "environment"; // 현재 사용 중인 카메라 방향
+let cameraCount = 0;
+let switching = false; // 카메라를 바꾸는 동안 true
 let failures = 0; // 포즈 인식이 연속으로 실패한 프레임 수
 let recording = false; // 시작을 누른 뒤 완료를 누르기 전까지 true
 let tracking = false; // 측정 조건을 만족해 실제로 프레임을 기록하는 동안 true
@@ -46,16 +52,28 @@ function setStatus(text, tone = "") {
   statusEl.dataset.tone = tone;
 }
 
-function updateControls() {
-  startButton.disabled = !landmarker || recording;
-  finishButton.disabled = !recording;
+function oppositeFacing() {
+  return facing === "environment" ? "user" : "environment";
 }
 
-async function openCamera() {
+function updateControls() {
+  startButton.disabled = !landmarker || recording || switching;
+  finishButton.disabled = !recording;
+  switchButton.disabled = !landmarker || recording || switching || cameraCount < 2;
+  switchButton.textContent =
+    cameraCount < 2 ? "전환할 카메라가 없습니다" : `${CAMERA_LABELS[oppositeFacing()]} 카메라로 전환`;
+}
+
+function stopCamera() {
+  video.srcObject?.getTracks().forEach((track) => track.stop());
+}
+
+async function openCamera(facingMode) {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
-    video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+    video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
   });
+  facing = stream.getVideoTracks()[0].getSettings().facingMode === "user" ? "user" : "environment";
   video.srcObject = stream;
   await video.play();
   canvas.width = video.videoWidth;
@@ -163,7 +181,7 @@ function syncVideoSize() {
 }
 
 function processVideoFrame() {
-  if (video.currentTime === lastVideoTime) return;
+  if (switching || !landmarker || video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
   syncVideoSize();
 
@@ -187,13 +205,13 @@ function processVideoFrame() {
 }
 
 /** 포즈 인식을 복구할 수 없을 때 끊긴 기록을 버리고 멈춘다. */
-function stopWithError() {
+function stopWithError(message = "포즈 인식이 중단되었습니다. 새로고침해 주세요.") {
   landmarker = null;
   recording = false;
   tracking = false;
   frames = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  setStatus("포즈 인식이 중단되었습니다. 새로고침해 주세요.", "warn");
+  setStatus(message, "warn");
   updateControls();
 }
 
@@ -253,6 +271,36 @@ finishButton.addEventListener("click", () => {
   updateControls();
 });
 
+async function switchCamera() {
+  const previous = facing;
+  const target = oppositeFacing();
+  switching = true;
+  updateControls();
+  setStatus("카메라를 전환하는 중…");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 휴대폰은 카메라를 동시에 두 대 열지 못하는 경우가 많아 먼저 끈다.
+  stopCamera();
+  try {
+    await openCamera({ exact: target });
+    renderMessages([]);
+  } catch (error) {
+    console.error(error);
+    renderMessages([`${CAMERA_LABELS[target]} 카메라로 전환하지 못했습니다. 이 기기에 없거나 다른 앱이 사용 중일 수 있습니다.`]);
+    try {
+      await openCamera({ ideal: previous });
+    } catch (restoreError) {
+      console.error(restoreError);
+      stopWithError("카메라를 다시 열지 못했습니다. 새로고침해 주세요.");
+    }
+  }
+
+  switching = false;
+  updateControls();
+}
+
+switchButton.addEventListener("click", switchCamera);
+
 async function main() {
   updateControls();
 
@@ -263,7 +311,9 @@ async function main() {
 
   try {
     setStatus("카메라를 여는 중…");
-    await openCamera();
+    await openCamera({ ideal: "environment" });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    cameraCount = devices.filter((device) => device.kind === "videoinput").length;
   } catch (error) {
     console.error(error);
     setStatus(CAMERA_ERRORS[error.name] ?? "카메라를 열지 못했습니다. 새로고침해 주세요.", "warn");
