@@ -53,6 +53,7 @@ async function openCamera() {
   await video.play();
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
+  video.parentElement.classList.add("live");
 }
 
 async function createLandmarker(delegate) {

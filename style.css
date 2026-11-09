@@ -52,6 +52,10 @@ body {
   background: #000;
 }
 
+.stage.live {
+  min-height: 0;
+}
+
 video,
 canvas {
   display: block;
