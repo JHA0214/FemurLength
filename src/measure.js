@@ -2,8 +2,16 @@
 // 브라우저 API에 의존하지 않으므로 Node에서 바로 테스트할 수 있다.
 
 // 사용자는 몸의 왼쪽이 카메라를 향하게 서고, 왼쪽 관절로만 측정한다.
-const LANDMARKS = { shoulder: 11, hip: 23, knee: 25, ankle: 27 };
+const LANDMARKS = { shoulder: 11, hip: 23, knee: 25, ankle: 27, heel: 29, toe: 31 };
 const RIGHT_SHOULDER = 12; // 옆으로 섰는지 판단할 때만 쓴다.
+
+// 발과 영상 하단 사이의 목표 거리(영상 높이 대비 비율). 카메라와 측정자의 거리를 맞추는 기준이다.
+export const FOOT_TARGET_RATIO = 0.06;
+// 측정을 시작할 때는 좁게 맞추고, 시작한 뒤에는 관절 떨림으로 끊기지 않도록 넓게 허용한다.
+const FOOT_START_TOLERANCE = 0.02;
+const FOOT_HOLD_TOLERANCE = 0.05;
+// F-U 각도가 이 값 이상이면 선 자세로 본다. 반쯤 앉은 상태에서 측정이 시작되는 것을 막는다.
+const STANDING_MIN_ANGLE = 165;
 
 const MIN_VISIBILITY = 0.5;
 const MIN_FRAMES = 10;
@@ -69,6 +77,34 @@ export function hasBody(joints) {
   );
 }
 
+/** 왼발의 가장 낮은 지점과 영상 하단 사이의 거리(영상 높이 대비 비율). 발이 인식되지 않으면 null. */
+export function footGapFromBottom(frame, videoHeight) {
+  const visible = [frame.heel, frame.toe].filter((p) => p.visibility >= MIN_VISIBILITY);
+  if (visible.length === 0) return null;
+  return (videoHeight - Math.max(...visible.map((p) => p.y))) / videoHeight;
+}
+
+/** 발이 안내선에 맞는지 판단한다. 측정 중 발이 잠깐 인식되지 않으면 맞는 것으로 유지한다. */
+export function isFootOnLine(gapRatio, alreadyTracking) {
+  if (gapRatio === null) return alreadyTracking;
+  const tolerance = alreadyTracking ? FOOT_HOLD_TOLERANCE : FOOT_START_TOLERANCE;
+  return Math.abs(gapRatio - FOOT_TARGET_RATIO) <= tolerance;
+}
+
+/** F-U 각도로 선 자세인지 판단한다. */
+export function isStanding(frame) {
+  return hipAngle(frame) >= STANDING_MIN_ANGLE;
+}
+
+/**
+ * 이번 프레임을 측정에 쓸지 결정한다.
+ * 발이 안내선에 맞고 선 자세일 때 시작하며, 시작한 뒤에는 발 위치만 확인한다.
+ */
+export function updateTracking(frame, gapRatio, alreadyTracking) {
+  if (!isFootOnLine(gapRatio, alreadyTracking)) return false;
+  return alreadyTracking || (frame !== null && hasBody(frame) && isStanding(frame));
+}
+
 /** 몸이 카메라에 대해 옆으로 서 있는지 어깨 좌우 간격으로 판단한다. */
 export function isSideOn(frame) {
   const shoulderGap = Math.abs(frame.shoulder.x - frame.rightShoulderX);
@@ -85,7 +121,7 @@ export function isSideOn(frame) {
  */
 export function analyze(frames) {
   if (frames.length === 0) {
-    return { ok: false, error: "사람이 인식되지 않았습니다. 전신이 화면에 나오게 서 주세요." };
+    return { ok: false, error: "측정된 구간이 없습니다. 발을 화면 아래 안내선에 맞추고 똑바로 선 상태에서 스쿼트를 시작해 주세요." };
   }
 
   const joints = frames.filter(hasBody);

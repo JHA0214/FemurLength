@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { analyze, hipAngle, toFrame } from "../src/measure.js";
+import { analyze, footGapFromBottom, hipAngle, isFootOnLine, toFrame, updateTracking } from "../src/measure.js";
 
 const WIDTH = 1280;
 const HEIGHT = 720;
@@ -10,7 +10,7 @@ const LENGTHS = { T: 40, F: 45, U: 50 };
 const deg = (d) => (d * Math.PI) / 180;
 
 /** 발목을 고정한 2관절 옆모습을 만든다. 각도는 수직선 기준(도). */
-function pose({ shin, thigh, torso, visibility = 0.9, rightVisibility = 0.9 }) {
+function pose({ shin, thigh, torso, visibility = 0.9, rightVisibility = 0.9, footY = 680 }) {
   const ankle = { x: 640, y: 660 };
   const knee = {
     x: ankle.x + Math.sin(deg(shin)) * LENGTHS.T * CM,
@@ -24,14 +24,16 @@ function pose({ shin, thigh, torso, visibility = 0.9, rightVisibility = 0.9 }) {
     x: hip.x + Math.sin(deg(torso)) * LENGTHS.U * CM,
     y: hip.y - Math.cos(deg(torso)) * LENGTHS.U * CM,
   };
-  const points = { shoulder, hip, knee, ankle };
+  const heel = { x: 620, y: footY - 4 };
+  const toe = { x: 690, y: footY };
+  const points = { shoulder, hip, knee, ankle, heel, toe };
 
   const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0 }));
   const put = (index, p, v) => {
     landmarks[index] = { x: p.x / WIDTH, y: p.y / HEIGHT, z: 0, visibility: v };
   };
-  const left = { shoulder: 11, hip: 23, knee: 25, ankle: 27 };
-  const right = { shoulder: 12, hip: 24, knee: 26, ankle: 28 };
+  const left = { shoulder: 11, hip: 23, knee: 25, ankle: 27, heel: 29, toe: 31 };
+  const right = { shoulder: 12, hip: 24, knee: 26, ankle: 28, heel: 30, toe: 32 };
   for (const joint of Object.keys(points)) {
     put(left[joint], points[joint], visibility);
     put(right[joint], points[joint], rightVisibility);
@@ -92,6 +94,35 @@ test("왼쪽 관절로만 측정한다", () => {
   assert.equal(analyze(rightHidden).ok, true);
   const leftHidden = Array.from({ length: 30 }, () => pose({ ...STANDING, visibility: 0 }));
   assert.equal(analyze(leftHidden).ok, false);
+});
+
+test("왼발의 가장 낮은 지점과 화면 하단의 거리를 영상 높이 비율로 잰다", () => {
+  assert.ok(Math.abs(footGapFromBottom(pose(STANDING), HEIGHT) - 40 / HEIGHT) < 0.0001);
+  assert.equal(footGapFromBottom(pose({ ...STANDING, visibility: 0 }), HEIGHT), null);
+});
+
+test("발이 안내선에 맞을 때 측정을 시작하고 벗어나면 멈춘다", () => {
+  assert.equal(isFootOnLine(0.06, false), true);
+  assert.equal(isFootOnLine(0.09, false), false); // 시작 전에는 좁은 범위만 허용
+  assert.equal(isFootOnLine(0.09, true), true); // 측정 중에는 떨림을 허용
+  assert.equal(isFootOnLine(0.13, true), false); // 걸어 나가면 기록 중단
+});
+
+test("발이 안내선에 맞아도 선 자세가 아니면 측정을 시작하지 않는다", () => {
+  assert.equal(updateTracking(pose(STANDING), 0.06, false), true);
+  assert.equal(updateTracking(pose(squat(0.5)), 0.06, false), false);
+  assert.equal(updateTracking(pose(STANDING), 0.09, false), false);
+  assert.equal(updateTracking(null, null, false), false);
+});
+
+test("측정이 시작되면 깊이 앉아도 끊기지 않고 발이 벗어나면 멈춘다", () => {
+  assert.equal(updateTracking(pose(squat(1)), 0.06, true), true);
+  assert.equal(updateTracking(pose(squat(1)), 0.13, true), false);
+});
+
+test("발이 잠깐 인식되지 않으면 측정 상태를 유지한다", () => {
+  assert.equal(isFootOnLine(null, true), true);
+  assert.equal(isFootOnLine(null, false), false);
 });
 
 test("스쿼트 동작이 없으면 경고한다", () => {

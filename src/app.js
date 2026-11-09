@@ -2,7 +2,18 @@ import {
   FilesetResolver,
   PoseLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import { analyze, hasBody, hipAngle, isSideOn, toFrame } from "./measure.js";
+import {
+  FOOT_TARGET_RATIO,
+  analyze,
+  footGapFromBottom,
+  hasBody,
+  hipAngle,
+  isFootOnLine,
+  isSideOn,
+  isStanding,
+  toFrame,
+  updateTracking,
+} from "./measure.js";
 
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
 const MODEL_URL =
@@ -19,7 +30,8 @@ const resultEmpty = document.getElementById("result-empty");
 const messagesEl = document.getElementById("messages");
 
 let landmarker = null;
-let recording = false;
+let recording = false; // 시작을 누른 뒤 완료를 누르기 전까지 true
+let tracking = false; // 측정 조건을 만족해 실제로 프레임을 기록하는 동안 true
 let frames = [];
 let lastVideoTime = -1;
 
@@ -89,16 +101,40 @@ function drawSkeleton(joints) {
   ctx.fillText(label, labelX, joints.hip.y);
 }
 
-function showLiveState(frame) {
-  if (!frame) {
-    setStatus(recording ? "측정 중 · 사람이 보이지 않습니다" : "사람이 보이지 않습니다", "warn");
-    return;
+function drawGuide(lineY, onLine) {
+  const scale = canvas.width / 1280;
+  ctx.save();
+  ctx.setLineDash([24 * scale, 14 * scale]);
+  ctx.lineWidth = 4 * scale;
+  ctx.strokeStyle = onLine ? "#35d0a5" : "#ffc48f";
+  ctx.beginPath();
+  ctx.moveTo(0, lineY);
+  ctx.lineTo(canvas.width, lineY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** 지금 자세의 문제를 안내 문구로 돌려준다. 문제가 없으면 null. */
+function postureProblem(frame, gapRatio) {
+  if (!frame) return "사람이 보이지 않습니다";
+  if (!hasBody(frame)) return "전신이 화면에 나오게 해 주세요";
+  if (!isSideOn(frame)) return "몸의 왼쪽이 카메라를 향하게 서 주세요";
+  if (gapRatio === null) return "발이 화면에 나오게 해 주세요";
+  if (!isFootOnLine(gapRatio, tracking)) {
+    return gapRatio < FOOT_TARGET_RATIO
+      ? "카메라에서 조금 멀어져 발을 안내선에 맞춰 주세요"
+      : "카메라 쪽으로 조금 다가와 발을 안내선에 맞춰 주세요";
   }
-  if (!hasBody(frame)) {
-    setStatus(recording ? "측정 중 · 전신이 화면에 나오게 해 주세요" : "전신이 화면에 나오게 해 주세요", "warn");
-  } else if (!isSideOn(frame)) {
-    setStatus(recording ? "측정 중 · 몸의 왼쪽이 카메라를 향하게 해 주세요" : "몸의 왼쪽이 카메라를 향하게 서 주세요", "warn");
-  } else if (recording) {
+  if (!tracking && !isStanding(frame)) return "똑바로 서 주세요";
+  return null;
+}
+
+function showLiveState(frame, gapRatio) {
+  const problem = postureProblem(frame, gapRatio);
+  if (problem) {
+    const prefix = tracking ? "측정 중 · " : recording ? "측정 대기 · " : "";
+    setStatus(prefix + problem, "warn");
+  } else if (tracking) {
     setStatus("측정 중 · 스쿼트를 진행한 뒤 완료를 누르세요", "live");
   } else {
     setStatus("준비 완료 · 시작을 누르세요", "ok");
@@ -114,11 +150,17 @@ function processVideoFrame() {
 
   const landmarks = result.landmarks[0];
   const frame = landmarks ? toFrame(landmarks, video.videoWidth, video.videoHeight) : null;
-  if (frame) {
-    drawSkeleton(frame);
-    if (recording) frames.push(frame);
+
+  const gapRatio = frame ? footGapFromBottom(frame, video.videoHeight) : null;
+
+  if (recording) {
+    tracking = updateTracking(frame, gapRatio, tracking);
+    if (tracking && frame) frames.push(frame);
   }
-  showLiveState(frame);
+
+  drawGuide(video.videoHeight * (1 - FOOT_TARGET_RATIO), gapRatio !== null && isFootOnLine(gapRatio, tracking));
+  if (frame) drawSkeleton(frame);
+  showLiveState(frame, gapRatio);
 }
 
 function loop() {
@@ -163,6 +205,7 @@ startButton.addEventListener("click", () => {
 
 finishButton.addEventListener("click", () => {
   recording = false;
+  tracking = false;
   renderResult(analyze(frames));
   updateControls();
 });
