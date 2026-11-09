@@ -1,0 +1,24 @@
+# 환경 변수와 비밀 정보
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+service-account*.json
+secrets/
+
+# 로컬 HTTPS 인증서
+*.crt
+*.csr
+
+# 의존성과 로그
+node_modules/
+*.log
+
+# OS와 편집기
+.DS_Store
+.vscode/
+.idea/

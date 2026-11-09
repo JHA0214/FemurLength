@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>스쿼트 체형 측정</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="src/app.js"></script>
+  </head>
+  <body>
+    <main class="layout">
+      <section class="stage">
+        <video id="video" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <p id="status" class="status" role="status">불러오는 중…</p>
+      </section>
+
+      <aside class="panel">
+        <h1>스쿼트 체형 측정</h1>
+        <p class="hint">전신이 나오도록 카메라 옆으로 선 뒤 시작을 누르고, 스쿼트를 마치면 완료를 누르세요. 길이는 F를 1로 둔 비율로 표시됩니다.</p>
+
+        <div class="actions">
+          <button id="start" type="button">시작</button>
+          <button id="finish" type="button" class="secondary">완료</button>
+        </div>
+
+        <p id="result-empty" class="empty">측정 결과가 여기에 표시됩니다.</p>
+        <dl id="result" class="result" hidden>
+          <div>
+            <dt>T <small>발목 축 – 무릎 축</small></dt>
+            <dd><span id="value-t"></span></dd>
+          </div>
+          <div>
+            <dt>F <small>무릎 축 – 엉덩 축 (기준)</small></dt>
+            <dd><span id="value-f"></span></dd>
+          </div>
+          <div>
+            <dt>U <small>엉덩 축 – 어깨 축</small></dt>
+            <dd><span id="value-u"></span></dd>
+          </div>
+          <div class="angle">
+            <dt>F–U 각도 <small>가장 깊은 지점</small></dt>
+            <dd><span id="value-angle"></span>°</dd>
+          </div>
+        </dl>
+        <ul id="messages" class="messages"></ul>
+      </aside>
+    </main>
+  </body>
+</html>
