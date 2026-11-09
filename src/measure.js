@@ -54,7 +54,8 @@ function around(values, index, radius) {
 
 /** 최댓값이 연속되는 구간의 가운데 인덱스. 평활하면 꼭대기가 평평해지기 때문이다. */
 function peakCenter(values) {
-  const peak = Math.max(...values);
+  // 긴 기록에서는 전개 연산자(...)가 인자 개수 한도를 넘으므로 reduce를 쓴다.
+  const peak = values.reduce((a, b) => Math.max(a, b));
   const first = values.indexOf(peak);
   let last = first;
   while (values[last + 1] === peak) last++;
@@ -137,7 +138,7 @@ export function analyze(frames) {
 
   // 이미지 y축은 아래로 증가하므로 y가 가장 큰 프레임이 가장 깊은 지점이다.
   const deepest = peakCenter(hipY);
-  const top = Math.min(...hipY);
+  const top = hipY.reduce((a, b) => Math.min(a, b));
   const travel = hipY[deepest] - top;
   const standingLimit = top + travel * STANDING_BAND;
   const standing = joints.filter((_, i) => hipY[i] <= standingLimit);

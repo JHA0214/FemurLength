@@ -27,6 +27,11 @@ const messagesEl = document.getElementById("messages");
 
 let landmarker = null;
 const MAX_CONSECUTIVE_FAILURES = 30; // 영상 약 1초 분량
+const CAMERA_ERRORS = {
+  NotAllowedError: "카메라 권한을 허용한 뒤 새로고침해 주세요.",
+  NotFoundError: "카메라를 찾을 수 없습니다.",
+  NotReadableError: "다른 앱이 카메라를 사용 중입니다. 해당 앱을 종료하고 새로고침해 주세요.",
+};
 
 let failures = 0; // 포즈 인식이 연속으로 실패한 프레임 수
 let recording = false; // 시작을 누른 뒤 완료를 누르기 전까지 true
@@ -35,6 +40,8 @@ let frames = [];
 let lastVideoTime = -1;
 
 function setStatus(text, tone = "") {
+  // 매 프레임 호출되므로, 문구가 그대로면 DOM과 스크린리더 안내를 건드리지 않는다.
+  if (statusEl.textContent === text && statusEl.dataset.tone === tone) return;
   statusEl.textContent = text;
   statusEl.dataset.tone = tone;
 }
@@ -143,9 +150,22 @@ function showLiveState(frame, gapRatio) {
   }
 }
 
+/** 기기 회전으로 영상 크기가 바뀌면 캔버스를 맞추고, 비교할 수 없게 된 기록을 버린다. */
+function syncVideoSize() {
+  if (video.videoWidth === canvas.width && video.videoHeight === canvas.height) return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  if (recording) {
+    frames = [];
+    tracking = false;
+    renderMessages(["화면이 회전되어 기록을 지웠습니다. 발을 안내선에 맞추고 다시 똑바로 서 주세요."]);
+  }
+}
+
 function processVideoFrame() {
   if (video.currentTime === lastVideoTime) return;
   lastVideoTime = video.currentTime;
+  syncVideoSize();
 
   const result = landmarker.detectForVideo(video, performance.now());
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -246,8 +266,7 @@ async function main() {
     await openCamera();
   } catch (error) {
     console.error(error);
-    const denied = error.name === "NotAllowedError";
-    setStatus(denied ? "카메라 권한을 허용한 뒤 새로고침해 주세요." : "카메라를 찾을 수 없습니다.", "warn");
+    setStatus(CAMERA_ERRORS[error.name] ?? "카메라를 열지 못했습니다. 새로고침해 주세요.", "warn");
     return;
   }
 

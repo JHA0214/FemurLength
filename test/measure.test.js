@@ -125,6 +125,12 @@ test("발이 잠깐 인식되지 않으면 측정 상태를 유지한다", () =>
   assert.equal(isFootOnLine(null, false), false);
 });
 
+test("아주 긴 기록도 오류 없이 분석한다", () => {
+  const frame = pose(STANDING);
+  const frames = Array.from({ length: 200000 }, () => frame);
+  assert.equal(analyze(frames).ok, true);
+});
+
 test("스쿼트 동작이 없으면 경고한다", () => {
   const frames = Array.from({ length: 30 }, () => pose(STANDING));
   const result = analyze(frames);
