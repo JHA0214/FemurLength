@@ -1,8 +1,4 @@
 import {
-  FilesetResolver,
-  PoseLandmarker,
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
-import {
   FOOT_TARGET_RATIO,
   analyze,
   footGapFromBottom,
@@ -15,7 +11,7 @@ import {
   updateTracking,
 } from "./measure.js";
 
-const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const MEDIAPIPE_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task";
 
@@ -30,6 +26,9 @@ const resultEmpty = document.getElementById("result-empty");
 const messagesEl = document.getElementById("messages");
 
 let landmarker = null;
+const MAX_CONSECUTIVE_FAILURES = 30; // 영상 약 1초 분량
+
+let failures = 0; // 포즈 인식이 연속으로 실패한 프레임 수
 let recording = false; // 시작을 누른 뒤 완료를 누르기 전까지 true
 let tracking = false; // 측정 조건을 만족해 실제로 프레임을 기록하는 동안 true
 let frames = [];
@@ -57,7 +56,9 @@ async function openCamera() {
 }
 
 async function createLandmarker(delegate) {
-  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+  // 정적 import는 실패하면 앱 전체가 실행되지 않으므로, 오류를 안내할 수 있도록 동적으로 불러온다.
+  const { FilesetResolver, PoseLandmarker } = await import(`${MEDIAPIPE_URL}/vision_bundle.mjs`);
+  const vision = await FilesetResolver.forVisionTasks(`${MEDIAPIPE_URL}/wasm`);
   return PoseLandmarker.createFromOptions(vision, {
     baseOptions: { modelAssetPath: MODEL_URL, delegate },
     runningMode: "VIDEO",
@@ -161,10 +162,31 @@ function processVideoFrame() {
   drawGuide(video.videoHeight * (1 - FOOT_TARGET_RATIO), gapRatio !== null && isFootOnLine(gapRatio, tracking));
   if (frame) drawSkeleton(frame);
   showLiveState(frame, gapRatio);
+  failures = 0;
+}
+
+/** 포즈 인식을 복구할 수 없을 때 끊긴 기록을 버리고 멈춘다. */
+function stopWithError() {
+  landmarker = null;
+  recording = false;
+  tracking = false;
+  frames = [];
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  setStatus("포즈 인식이 중단되었습니다. 새로고침해 주세요.", "warn");
+  updateControls();
 }
 
 function loop() {
-  processVideoFrame();
+  try {
+    processVideoFrame();
+  } catch (error) {
+    console.error(error);
+    failures++;
+    if (failures >= MAX_CONSECUTIVE_FAILURES) {
+      stopWithError();
+      return;
+    }
+  }
   requestAnimationFrame(loop);
 }
 
