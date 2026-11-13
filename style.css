@@ -139,9 +139,20 @@ button.secondary {
   color: var(--accent);
 }
 
-.switch-camera {
+.switch-camera,
+.install {
   width: 100%;
   margin-top: 8px;
+}
+
+.install[hidden],
+.install-hint[hidden] {
+  display: none;
+}
+
+.install-hint {
+  margin-top: 12px;
+  font-size: 13px;
 }
 
 button:disabled {

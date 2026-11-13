@@ -1,0 +1,16 @@
+{
+  "name": "스쿼트 체형 측정",
+  "short_name": "체형 측정",
+  "description": "카메라로 옆모습 스쿼트를 촬영해 T, F, U 길이 비율과 F–U 각도를 측정합니다.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f3",
+  "theme_color": "#0b7a5e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

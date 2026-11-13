@@ -4,9 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>스쿼트 체형 측정</title>
-    <link rel="icon" href="data:," />
+    <meta name="theme-color" content="#0b7a5e" />
+    <meta name="apple-mobile-web-app-title" content="체형 측정" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="src/app.js"></script>
+    <script type="module" src="src/install.js"></script>
   </head>
   <body>
     <main class="layout">
@@ -25,6 +30,8 @@
           <button id="finish" type="button" class="secondary">완료</button>
         </div>
         <button id="switch-camera" type="button" class="secondary switch-camera">전면 카메라로 전환</button>
+        <button id="install" type="button" class="secondary install" hidden>홈 화면에 앱 설치</button>
+        <p id="install-ios" class="hint install-hint" hidden>홈 화면에 설치하려면 Safari 하단의 공유 버튼을 누른 뒤 "홈 화면에 추가"를 선택하세요.</p>
 
         <p id="result-empty" class="empty">측정 결과가 여기에 표시됩니다.</p>
         <dl id="result" class="result" hidden>
