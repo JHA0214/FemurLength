@@ -92,6 +92,32 @@ canvas {
   background: #b3261e;
 }
 
+/* 발 안내선 바로 아래. 영상이 낮아 공간이 부족하면 하단 안쪽으로 올라온다. */
+.tilt {
+  position: absolute;
+  top: min(calc(var(--guide-top, 94%) + 4px), calc(100% - 26px));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffc48f;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.tilt.level {
+  color: #7ff0cf;
+}
+
+.tilt[hidden] {
+  display: none;
+}
+
 .panel {
   padding: 20px;
   border: 1px solid var(--border);
